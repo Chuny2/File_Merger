@@ -1,0 +1,12 @@
+# File Merger Application
+
+## Description
+The **File Merger Application** is a and user-friendly tool for merging multiple text files into a single file. It is built using **PyQt6** and features a clean and interactive graphical interface.
+
+---
+
+## Requirements
+- Python 3.6 or higher  
+- **PyQt6** installed  
+  ```bash
+  pip install PyQt6
