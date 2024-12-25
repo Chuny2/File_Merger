@@ -46,4 +46,6 @@ python main.py
 
 ---
 
+![App Screenshot](image.png)
+
 
