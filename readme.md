@@ -1,6 +1,6 @@
 # File Merger
 
-**File Merger** is a simple and modern program used to combine multiple text files into one. It is ideal for tasks such as merging combo lists or processing datasets.
+**File Merger** is a simple program used to combine multiple text files into one. It is ideal for tasks such as merging combo lists or processing datasets.
 
 ---
 
