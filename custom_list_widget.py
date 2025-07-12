@@ -1,4 +1,3 @@
-
 from PyQt6.QtWidgets import QListWidget
 from PyQt6.QtGui import QPainter, QFont, QColor
 from PyQt6.QtCore import Qt
@@ -8,6 +7,11 @@ class CustomListWidget(QListWidget):
         super().__init__(parent)
         self.setAlternatingRowColors(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        
+        # Cache font and color objects to avoid recreating them in paintEvent
+        self._placeholder_font = QFont("Arial", 12)
+        self._placeholder_color = QColor("#7f8c8d")
+        self._placeholder_text = "Drag and drop files here"
 
     def paintEvent(self, event):
         super().paintEvent(event)
@@ -15,7 +19,7 @@ class CustomListWidget(QListWidget):
             painter = QPainter(self.viewport())
             painter.save()
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-            painter.setPen(QColor("#7f8c8d"))
-            painter.setFont(QFont("Arial", 12))
-            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Drag and drop files here")
+            painter.setPen(self._placeholder_color)
+            painter.setFont(self._placeholder_font)
+            painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._placeholder_text)
             painter.restore()

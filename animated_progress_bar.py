@@ -1,4 +1,3 @@
-
 from PyQt6.QtWidgets import QProgressBar
 from PyQt6.QtCore import QPropertyAnimation, QEasingCurve
 

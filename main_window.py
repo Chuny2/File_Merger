@@ -1,13 +1,30 @@
-
 import os
 from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-                             QPushButton, QListWidgetItem, QFileDialog, QMessageBox, QLabel)
+                             QPushButton, QListWidgetItem, QFileDialog, QMessageBox, QLabel, QCheckBox)
 from PyQt6.QtCore import Qt
 from merge_thread import MergeThread
 from animated_progress_bar import AnimatedProgressBar
 from custom_list_widget import CustomListWidget
 
 class FileMergerApp(QMainWindow):
+    # Class constant for message box styling (avoid recreating it each time)
+    MESSAGE_BOX_STYLE = """
+        QMessageBox {
+            background-color: #34495e;
+            color: #ecf0f1;
+        }
+        QPushButton {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 3px;
+        }
+        QPushButton:hover {
+            background-color: #2980b9;
+        }
+    """
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("File Merger")
@@ -72,6 +89,25 @@ class FileMergerApp(QMainWindow):
                 font-size: 16px;
                 font-weight: bold;
             }
+            QCheckBox {
+                color: #ecf0f1;
+                font-size: 14px;
+                padding: 5px;
+            }
+            QCheckBox::indicator {
+                width: 18px;
+                height: 18px;
+                border: 2px solid #3498db;
+                border-radius: 3px;
+                background-color: #2c3e50;
+            }
+            QCheckBox::indicator:checked {
+                background-color: #3498db;
+                border-color: #2980b9;
+            }
+            QCheckBox::indicator:checked:hover {
+                background-color: #2980b9;
+            }
         """)
 
         main_widget = QWidget()
@@ -98,6 +134,11 @@ class FileMergerApp(QMainWindow):
         self.merge_button = QPushButton("Merge Files")
         self.merge_button.clicked.connect(self.merge_files)
         button_layout.addWidget(self.merge_button)
+
+        # Add checkbox for deleting source files after merge
+        self.delete_sources_checkbox = QCheckBox("Delete source files after merging")
+        self.delete_sources_checkbox.setToolTip("Check this to delete the original files after successful merge")
+        layout.addWidget(self.delete_sources_checkbox)
 
         self.progress_label = QLabel("Progress:")
         layout.addWidget(self.progress_label)
@@ -138,14 +179,17 @@ class FileMergerApp(QMainWindow):
         if not output_file:
             return
 
+        # Collect file paths efficiently
         file_paths = [self.file_list.item(i).toolTip() for i in range(self.file_list.count())]
-        self.merge_thread = MergeThread(file_paths, output_file)
+        delete_sources = self.delete_sources_checkbox.isChecked()
+        self.merge_thread = MergeThread(file_paths, output_file, delete_sources)
         self.merge_thread.progress.connect(self.update_progress)
         self.merge_thread.finished.connect(self.merge_finished)
         self.merge_thread.start()
 
         self.merge_button.setEnabled(False)
         self.remove_button.setEnabled(False)
+        self.delete_sources_checkbox.setEnabled(False)
         self.status_label.setText("Merging files...")
 
     def update_progress(self, value):
@@ -154,10 +198,16 @@ class FileMergerApp(QMainWindow):
     def merge_finished(self, success, error_message):
         self.merge_button.setEnabled(True)
         self.remove_button.setEnabled(True)
+        self.delete_sources_checkbox.setEnabled(True)
 
         if success:
             self.show_message("Success", "Content merged successfully.", QMessageBox.Icon.Information)
             self.status_label.setText("Merging completed successfully.")
+            # Clear the file list if delete sources was checked and merge was successful
+            # Check checkbox state only once and cache it
+            should_clear_list = self.delete_sources_checkbox.isChecked()
+            if should_clear_list:
+                self.file_list.clear()
         else:
             self.show_message("Error", f"An error occurred while merging the files: {error_message}", QMessageBox.Icon.Critical)
             self.status_label.setText("Error while merging files.")
@@ -169,20 +219,5 @@ class FileMergerApp(QMainWindow):
         msg_box.setWindowTitle(title)
         msg_box.setText(message)
         msg_box.setIcon(icon)
-        msg_box.setStyleSheet("""
-            QMessageBox {
-                background-color: #34495e;
-                color: #ecf0f1;
-            }
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                border: none;
-                padding: 5px 15px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
+        msg_box.setStyleSheet(self.MESSAGE_BOX_STYLE)
         msg_box.exec()
