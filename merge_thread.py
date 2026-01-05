@@ -5,44 +5,65 @@ class MergeThread(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, file_paths, output_file, delete_sources=False):
+    def __init__(self, sources, target, cleanup=False):
         super().__init__()
-        self.file_paths = file_paths
-        self.output_file = output_file
-        self.delete_sources = delete_sources
+        self.sources = sources
+        self.target = target
+        self.cleanup = cleanup
+        self._active = True
+
+    def stop(self):
+        self._active = False
 
     def run(self):
         try:
-            total_files = len(self.file_paths)
-            with open(self.output_file, 'w', encoding='utf-8') as outfile:
-                for i, file_path in enumerate(self.file_paths):
-                    with open(file_path, 'r', encoding='utf-8', errors='replace') as infile:
-                        # Stream file content in chunks to avoid memory issues with large files
-                        while True:
-                            chunk = infile.read(8192)  # Read 8KB chunks
+            target_abs = os.path.abspath(self.target)
+            sources_abs = [os.path.abspath(p) for p in self.sources]
+            
+            if target_abs in sources_abs:
+                raise ValueError("Target file cannot be one of the source files.")
+
+            total_size = sum(os.path.getsize(f) for f in self.sources)
+            processed_size = 0
+            last_progress = -1
+            
+            with open(self.target, 'wb') as outfile:
+                for src in self.sources:
+                    if not self._active:
+                        break
+                        
+                    with open(src, 'rb') as infile:
+                        while self._active:
+                            chunk = infile.read(1024 * 1024)
                             if not chunk:
                                 break
                             outfile.write(chunk)
-                        # Add separator between files (except for the last one)
-                        if i < total_files - 1:
-                            outfile.write('\n')
-                    # Pre-calculate progress percentage
-                    progress_percent = int((i + 1) * 100 / total_files)
-                    self.progress.emit(progress_percent)
-            
-            # Delete source files if requested (only after successful merge)
-            if self.delete_sources:
-                deleted_count = 0
-                for file_path in self.file_paths:
+                            
+                            processed_size += len(chunk)
+                            
+                            progress = int((processed_size * 100) / total_size) if total_size > 0 else 100
+
+                            if progress != last_progress:
+                                self.progress.emit(progress)
+                                last_progress = progress
+                        
+
+
+            if not self._active:
+                if os.path.exists(self.target):
                     try:
-                        os.remove(file_path)
-                        deleted_count += 1
+                        os.remove(self.target)
+                    except:
+                        pass
+                self.finished.emit(False, "Merging cancelled by user.")
+                return
+            
+            if self.cleanup:
+                for src in self.sources:
+                    try:
+                        os.remove(src)
                     except OSError as e:
-                        # Log the error but don't fail the entire operation
-                        print(f"Warning: Could not delete {file_path}: {e}")
-                
-                # Optional: Could emit a signal about deletion results
-                # self.deletion_complete.emit(deleted_count, len(self.file_paths))
+                        print(f"Warning: Could not delete {src}: {e}")
             
             self.finished.emit(True, "")
         except Exception as e:

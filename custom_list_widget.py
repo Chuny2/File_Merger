@@ -8,7 +8,6 @@ class CustomListWidget(QListWidget):
         self.setAlternatingRowColors(True)
         self.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
         
-        # Cache font and color objects to avoid recreating them in paintEvent
         self._placeholder_font = QFont("Arial", 12)
         self._placeholder_color = QColor("#7f8c8d")
         self._placeholder_text = "Drag and drop files here"

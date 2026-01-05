@@ -7,7 +7,6 @@ from animated_progress_bar import AnimatedProgressBar
 from custom_list_widget import CustomListWidget
 
 class FileMergerApp(QMainWindow):
-    # Class constant for message box styling (avoid recreating it each time)
     MESSAGE_BOX_STYLE = """
         QMessageBox {
             background-color: #34495e;
@@ -128,17 +127,22 @@ class FileMergerApp(QMainWindow):
         layout.addLayout(button_layout)
 
         self.remove_button = QPushButton("Remove Selected")
-        self.remove_button.clicked.connect(self.remove_files)
+        self.remove_button.clicked.connect(self.remove_selected)
         button_layout.addWidget(self.remove_button)
 
         self.merge_button = QPushButton("Merge Files")
         self.merge_button.clicked.connect(self.merge_files)
         button_layout.addWidget(self.merge_button)
 
-        # Add checkbox for deleting source files after merge
-        self.delete_sources_checkbox = QCheckBox("Delete source files after merging")
-        self.delete_sources_checkbox.setToolTip("Check this to delete the original files after successful merge")
-        layout.addWidget(self.delete_sources_checkbox)
+        self.cancel_button = QPushButton("Stop")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setStyleSheet("background-color: #e74c3c;")
+        self.cancel_button.clicked.connect(self.stop_merging)
+        button_layout.addWidget(self.cancel_button)
+
+        self.cleanup_checkbox = QCheckBox("Delete source files after merging")
+        self.cleanup_checkbox.setToolTip("Delete the original files after a successful merge")
+        layout.addWidget(self.cleanup_checkbox)
 
         self.progress_label = QLabel("Progress:")
         layout.addWidget(self.progress_label)
@@ -156,17 +160,26 @@ class FileMergerApp(QMainWindow):
             event.acceptProposedAction()
 
     def dropEvent(self, event):
-        files = [u.toLocalFile() for u in event.mimeData().urls() if u.toLocalFile().endswith('.txt')]
-        self.add_files(files)
+        files = [u.toLocalFile() for u in event.mimeData().urls() 
+                 if u.toLocalFile().lower().endswith('.txt')]
+        self.import_files(files)
 
-    def add_files(self, files):
-        for file in files:
-            item = QListWidgetItem(os.path.basename(file))
-            item.setToolTip(file)
-            self.file_list.addItem(item)
+    def import_files(self, files):
+        if not files:
+            return
+            
+        self.file_list.setUpdatesEnabled(False)
+        try:
+            for file in files:
+                item = QListWidgetItem(os.path.basename(file))
+                item.setToolTip(file)
+                self.file_list.addItem(item)
+        finally:
+            self.file_list.setUpdatesEnabled(True)
+            
         self.status_label.setText(f"{len(files)} file(s) added successfully.")
 
-    def remove_files(self):
+    def remove_selected(self):
         for item in self.file_list.selectedItems():
             self.file_list.takeItem(self.file_list.row(item))
 
@@ -179,34 +192,39 @@ class FileMergerApp(QMainWindow):
         if not output_file:
             return
 
-        # Collect file paths efficiently
-        file_paths = [self.file_list.item(i).toolTip() for i in range(self.file_list.count())]
-        delete_sources = self.delete_sources_checkbox.isChecked()
-        self.merge_thread = MergeThread(file_paths, output_file, delete_sources)
-        self.merge_thread.progress.connect(self.update_progress)
-        self.merge_thread.finished.connect(self.merge_finished)
-        self.merge_thread.start()
+        sources = [self.file_list.item(i).toolTip() for i in range(self.file_list.count())]
+        cleanup = self.cleanup_checkbox.isChecked()
+        self.worker = MergeThread(sources, output_file, cleanup)
+        self.worker.progress.connect(self.update_progress)
+        self.worker.finished.connect(self.on_merge_complete)
+        self.worker.start()
 
         self.merge_button.setEnabled(False)
         self.remove_button.setEnabled(False)
-        self.delete_sources_checkbox.setEnabled(False)
+        self.cleanup_checkbox.setEnabled(False)
+        self.cancel_button.setEnabled(True)
         self.status_label.setText("Merging files...")
+
+    def stop_merging(self):
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.cancel_button.setEnabled(False)
+            self.status_label.setText("Stopping...")
+            self.worker.stop()
 
     def update_progress(self, value):
         self.progress_bar.setValue(value)
 
-    def merge_finished(self, success, error_message):
+    def on_merge_complete(self, success, error_message):
         self.merge_button.setEnabled(True)
         self.remove_button.setEnabled(True)
-        self.delete_sources_checkbox.setEnabled(True)
+        self.cleanup_checkbox.setEnabled(True)
+        self.cancel_button.setEnabled(False)
 
         if success:
             self.show_message("Success", "Content merged successfully.", QMessageBox.Icon.Information)
             self.status_label.setText("Merging completed successfully.")
-            # Clear the file list if delete sources was checked and merge was successful
-            # Check checkbox state only once and cache it
-            should_clear_list = self.delete_sources_checkbox.isChecked()
-            if should_clear_list:
+            
+            if self.cleanup_checkbox.isChecked():
                 self.file_list.clear()
         else:
             self.show_message("Error", f"An error occurred while merging the files: {error_message}", QMessageBox.Icon.Critical)
