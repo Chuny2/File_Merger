@@ -147,44 +147,59 @@ class FileMergerApp(QMainWindow):
         self.file_list = CustomListWidget()
         layout.addWidget(self.file_list)
 
-        button_layout = QHBoxLayout()
-        button_layout.setSpacing(10)
-        layout.addLayout(button_layout)
+        # --- Section 1: File Preparation ---
+        prep_layout = QHBoxLayout()
+        prep_layout.setSpacing(10)
+        layout.addLayout(prep_layout)
 
         self.add_button = QPushButton("Add Files")
         self.add_button.clicked.connect(self.select_files)
-        button_layout.addWidget(self.add_button)
+        prep_layout.addWidget(self.add_button)
 
         self.remove_button = QPushButton("Remove Selected")
         self.remove_button.setEnabled(False)
         self.remove_button.clicked.connect(self.remove_selected)
-        button_layout.addWidget(self.remove_button)
+        prep_layout.addWidget(self.remove_button)
+
+        self.dedup_selected_button = QPushButton("Deduplicate Selected")
+        self.dedup_selected_button.setEnabled(False)
+        self.dedup_selected_button.clicked.connect(self.deduplicate_selected)
+        prep_layout.addWidget(self.dedup_selected_button)
+
+        self.file_list.itemSelectionChanged.connect(self.update_button_states)
+
+        # --- Section 2: Options ---
+        options_layout = QVBoxLayout()
+        options_layout.setContentsMargins(0, 10, 0, 10) # Add some spacing
+        layout.addLayout(options_layout)
+
+        self.cleanup_checkbox = QCheckBox("Delete source files after merging")
+        self.cleanup_checkbox.setToolTip("Delete the original files after a successful merge")
+        options_layout.addWidget(self.cleanup_checkbox)
+
+        self.dedup_checkbox = QCheckBox("Deduplicate final merged file")
+        self.dedup_checkbox.setToolTip("Remove duplicate lines across all files during the final merge")
+        options_layout.addWidget(self.dedup_checkbox)
+
+        # --- Section 3: Execution ---
+        action_layout = QHBoxLayout()
+        action_layout.setSpacing(10)
+        layout.addLayout(action_layout)
 
         self.merge_button = QPushButton("Merge Files")
         self.merge_button.setEnabled(False)
         self.merge_button.clicked.connect(self.merge_files)
-        button_layout.addWidget(self.merge_button)
+        # Make merge button the default/primary action visually check later via CSS if needed, 
+        # but for now, position and size imply it.
+        self.merge_button.setMinimumHeight(40) 
+        action_layout.addWidget(self.merge_button)
 
         self.cancel_button = QPushButton("Stop")
         self.cancel_button.setObjectName("stopButton")
         self.cancel_button.setEnabled(False)
         self.cancel_button.clicked.connect(self.stop_merging)
-        button_layout.addWidget(self.cancel_button)
-
-        self.dedup_selected_button = QPushButton("Deduplicate Selected")
-        self.dedup_selected_button.setEnabled(False)
-        self.dedup_selected_button.clicked.connect(self.deduplicate_selected)
-        layout.addWidget(self.dedup_selected_button)
-
-        self.file_list.itemSelectionChanged.connect(self.update_button_states)
-
-        self.cleanup_checkbox = QCheckBox("Delete source files after merging")
-        self.cleanup_checkbox.setToolTip("Delete the original files after a successful merge")
-        layout.addWidget(self.cleanup_checkbox)
-
-        self.dedup_checkbox = QCheckBox("Deduplicate final merged file")
-        self.dedup_checkbox.setToolTip("Remove duplicate lines across all files during the final merge")
-        layout.addWidget(self.dedup_checkbox)
+        self.cancel_button.setMinimumHeight(40)
+        action_layout.addWidget(self.cancel_button)
 
         self.progress_label = QLabel("Progress:")
         self.progress_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
