@@ -3,6 +3,7 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QPushButton, QListWidgetItem, QFileDialog, QMessageBox, QLabel, QCheckBox)
 from PyQt6.QtCore import Qt
 from merge_thread import MergeThread
+from deduplication_thread import DeduplicationThread
 from animated_progress_bar import AnimatedProgressBar
 from custom_list_widget import CustomListWidget
 
@@ -36,17 +37,17 @@ class FileMergerApp(QMainWindow):
             QWidget {
                 background-color: #34495e;
                 color: #ecf0f1;
+                font-family: 'Segoe UI';
             }
             QPushButton {
                 background-color: #3498db;
                 color: white;
                 border: none;
                 padding: 10px 20px;
-                text-align: center;
-                text-decoration: none;
-                font-size: 16px;
-                margin: 4px 2px;
+                font-size: 14px;
+                font-weight: bold;
                 border-radius: 5px;
+                min-height: 20px;
             }
             QPushButton:hover {
                 background-color: #2980b9;
@@ -54,30 +55,49 @@ class FileMergerApp(QMainWindow):
             QPushButton:pressed {
                 background-color: #2574a9;
             }
+            QPushButton:disabled {
+                background-color: #7f8c8d;
+                color: #bdc3c7;
+            }
+            QPushButton#stopButton {
+                background-color: #e74c3c;
+            }
+            QPushButton#stopButton:hover {
+                background-color: #c0392b;
+            }
+            QPushButton#stopButton:pressed {
+                background-color: #a93226;
+            }
             QListWidget {
                 border: 2px solid #3498db;
-                border-radius: 10px;
+                border-radius: 8px;
                 background-color: #2c3e50;
-                padding: 10px;
+                padding: 5px;
                 font-size: 14px;
             }
             QListWidget::item {
-                padding: 5px;
-                border-bottom: 1px solid #34495e;
+                padding: 8px;
+                border-bottom: 1px solid #1a252f;
+                color: #ecf0f1;
             }
             QListWidget::item:selected {
                 background-color: #3498db;
                 color: white;
+                border-radius: 4px;
+                border-bottom: 1px solid #3498db;
             }
-            QListWidget::item:alternate {
+            QListWidget::item:selected:!active {
                 background-color: #2c3e50;
+                border: 1px solid #3498db;
+                border-bottom: 1px solid #3498db;
             }
             QProgressBar {
-                border: none;
-                background-color: #34495e;
-                height: 10px;
+                border: 1px solid #3498db;
+                background-color: #2c3e50;
+                height: 12px;
                 text-align: center;
-                border-radius: 5px;
+                border-radius: 6px;
+                color: transparent;
             }
             QProgressBar::chunk {
                 background-color: #2ecc71;
@@ -85,27 +105,29 @@ class FileMergerApp(QMainWindow):
             }
             QLabel {
                 color: #ecf0f1;
-                font-size: 16px;
+                font-size: 14px;
+            }
+            QLabel#titleLabel {
+                font-size: 26px;
                 font-weight: bold;
+                margin-bottom: 10px;
             }
             QCheckBox {
                 color: #ecf0f1;
                 font-size: 14px;
                 padding: 5px;
+                margin-top: 5px;
             }
             QCheckBox::indicator {
                 width: 18px;
                 height: 18px;
                 border: 2px solid #3498db;
-                border-radius: 3px;
+                border-radius: 4px;
                 background-color: #2c3e50;
             }
             QCheckBox::indicator:checked {
                 background-color: #3498db;
                 border-color: #2980b9;
-            }
-            QCheckBox::indicator:checked:hover {
-                background-color: #2980b9;
             }
         """)
 
@@ -113,38 +135,59 @@ class FileMergerApp(QMainWindow):
         self.setCentralWidget(main_widget)
 
         layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         main_widget.setLayout(layout)
 
         title_label = QLabel("File Merger")
+        title_label.setObjectName("titleLabel")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title_label.setStyleSheet("font-size: 24px; margin-bottom: 20px;")
         layout.addWidget(title_label)
 
         self.file_list = CustomListWidget()
         layout.addWidget(self.file_list)
 
         button_layout = QHBoxLayout()
+        button_layout.setSpacing(10)
         layout.addLayout(button_layout)
 
+        self.add_button = QPushButton("Add Files")
+        self.add_button.clicked.connect(self.select_files)
+        button_layout.addWidget(self.add_button)
+
         self.remove_button = QPushButton("Remove Selected")
+        self.remove_button.setEnabled(False)
         self.remove_button.clicked.connect(self.remove_selected)
         button_layout.addWidget(self.remove_button)
 
         self.merge_button = QPushButton("Merge Files")
+        self.merge_button.setEnabled(False)
         self.merge_button.clicked.connect(self.merge_files)
         button_layout.addWidget(self.merge_button)
 
         self.cancel_button = QPushButton("Stop")
+        self.cancel_button.setObjectName("stopButton")
         self.cancel_button.setEnabled(False)
-        self.cancel_button.setStyleSheet("background-color: #e74c3c;")
         self.cancel_button.clicked.connect(self.stop_merging)
         button_layout.addWidget(self.cancel_button)
+
+        self.dedup_selected_button = QPushButton("Deduplicate Selected")
+        self.dedup_selected_button.setEnabled(False)
+        self.dedup_selected_button.clicked.connect(self.deduplicate_selected)
+        layout.addWidget(self.dedup_selected_button)
+
+        self.file_list.itemSelectionChanged.connect(self.update_button_states)
 
         self.cleanup_checkbox = QCheckBox("Delete source files after merging")
         self.cleanup_checkbox.setToolTip("Delete the original files after a successful merge")
         layout.addWidget(self.cleanup_checkbox)
 
+        self.dedup_checkbox = QCheckBox("Deduplicate final merged file")
+        self.dedup_checkbox.setToolTip("Remove duplicate lines across all files during the final merge")
+        layout.addWidget(self.dedup_checkbox)
+
         self.progress_label = QLabel("Progress:")
+        self.progress_label.setStyleSheet("font-weight: bold; margin-top: 10px;")
         layout.addWidget(self.progress_label)
 
         self.progress_bar = AnimatedProgressBar()
@@ -153,7 +196,11 @@ class FileMergerApp(QMainWindow):
 
         self.status_label = QLabel("")
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_label.setStyleSheet("font-style: italic; color: #bdc3c7;")
         layout.addWidget(self.status_label)
+        
+        # Keep track of active thread type
+        self.active_worker = None
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
@@ -164,24 +211,67 @@ class FileMergerApp(QMainWindow):
                  if u.toLocalFile().lower().endswith('.txt')]
         self.import_files(files)
 
+    def select_files(self):
+        files, _ = QFileDialog.getOpenFileNames(self, "Select Text Files", "", "Text Files (*.txt)")
+        if files:
+            self.import_files(files)
+
+    def deduplicate_selected(self):
+        selected_items = self.file_list.selectedItems()
+        if not selected_items:
+            return
+            
+        sources = [item.toolTip() for item in selected_items]
+        
+        self.active_worker = DeduplicationThread(sources)
+        self.active_worker.progress.connect(self.update_progress)
+        self.active_worker.finished.connect(self.on_process_complete)
+        self.active_worker.start()
+
+        self.set_ui_processing_state(True)
+        self.status_label.setText("Deduplicating selected files...")
+
     def import_files(self, files):
         if not files:
             return
             
         self.file_list.setUpdatesEnabled(False)
+        added_count = 0
         try:
+            existing_files = {self.file_list.item(i).toolTip() for i in range(self.file_list.count())}
             for file in files:
+                if file in existing_files:
+                    continue
                 item = QListWidgetItem(os.path.basename(file))
                 item.setToolTip(file)
                 self.file_list.addItem(item)
+                added_count += 1
         finally:
             self.file_list.setUpdatesEnabled(True)
             
-        self.status_label.setText(f"{len(files)} file(s) added successfully.")
+        if added_count > 0:
+            self.status_label.setText(f"{added_count} file(s) added successfully.")
+        else:
+            self.status_label.setText("No new files added (duplicates ignored).")
+        
+        self.update_button_states()
 
     def remove_selected(self):
         for item in self.file_list.selectedItems():
             self.file_list.takeItem(self.file_list.row(item))
+        self.update_button_states()
+
+    def update_button_states(self):
+        has_items = self.file_list.count() > 0
+        has_selection = len(self.file_list.selectedItems()) > 0
+        is_merging = self.cancel_button.isEnabled()
+
+        self.merge_button.setEnabled(has_items and not is_merging)
+        self.remove_button.setEnabled(has_selection and not is_merging)
+        self.dedup_selected_button.setEnabled(has_selection and not is_merging)
+        self.add_button.setEnabled(not is_merging)
+        self.cleanup_checkbox.setEnabled(not is_merging)
+        self.dedup_checkbox.setEnabled(not is_merging)
 
     def merge_files(self):
         if self.file_list.count() == 0:
@@ -194,43 +284,77 @@ class FileMergerApp(QMainWindow):
 
         sources = [self.file_list.item(i).toolTip() for i in range(self.file_list.count())]
         cleanup = self.cleanup_checkbox.isChecked()
-        self.worker = MergeThread(sources, output_file, cleanup)
-        self.worker.progress.connect(self.update_progress)
-        self.worker.finished.connect(self.on_merge_complete)
-        self.worker.start()
+        dedup = self.dedup_checkbox.isChecked()
+        
+        self.active_worker = MergeThread(sources, output_file, cleanup, dedup)
+        self.active_worker.progress.connect(self.update_progress)
+        self.active_worker.finished.connect(self.on_process_complete)
+        self.active_worker.start()
 
-        self.merge_button.setEnabled(False)
-        self.remove_button.setEnabled(False)
-        self.cleanup_checkbox.setEnabled(False)
-        self.cancel_button.setEnabled(True)
+        self.set_ui_processing_state(True)
         self.status_label.setText("Merging files...")
 
+    def set_ui_processing_state(self, processing):
+        self.merge_button.setEnabled(not processing)
+        self.remove_button.setEnabled(not processing)
+        self.add_button.setEnabled(not processing)
+        self.dedup_selected_button.setEnabled(not processing)
+        self.cleanup_checkbox.setEnabled(not processing)
+        self.dedup_checkbox.setEnabled(not processing)
+        self.cancel_button.setEnabled(processing)
+        if not processing:
+            self.update_button_states()
+
     def stop_merging(self):
-        if hasattr(self, 'worker') and self.worker.isRunning():
+        if self.active_worker and self.active_worker.isRunning():
             self.cancel_button.setEnabled(False)
             self.status_label.setText("Stopping...")
-            self.worker.stop()
+            self.active_worker.stop()
 
     def update_progress(self, value):
         self.progress_bar.setValue(value)
 
-    def on_merge_complete(self, success, error_message):
-        self.merge_button.setEnabled(True)
-        self.remove_button.setEnabled(True)
-        self.cleanup_checkbox.setEnabled(True)
-        self.cancel_button.setEnabled(False)
+    def on_process_complete(self, success, error_message):
+        self.set_ui_processing_state(False)
+        
+        action = "Processing"
+        if isinstance(self.active_worker, MergeThread):
+            action = "Merging"
+        elif isinstance(self.active_worker, DeduplicationThread):
+            action = "Deduplication"
 
         if success:
-            self.show_message("Success", "Content merged successfully.", QMessageBox.Icon.Information)
-            self.status_label.setText("Merging completed successfully.")
+            self.progress_bar.setValue(100)
+            self.show_message("Success", f"{action} completed successfully.", QMessageBox.Icon.Information)
+            self.status_label.setText(f"{action} completed successfully.")
             
-            if self.cleanup_checkbox.isChecked():
+            if action == "Merging" and self.cleanup_checkbox.isChecked():
                 self.file_list.clear()
+                self.update_button_states()
         else:
-            self.show_message("Error", f"An error occurred while merging the files: {error_message}", QMessageBox.Icon.Critical)
-            self.status_label.setText("Error while merging files.")
+            if "cancelled" in error_message.lower():
+                self.show_message("Cancelled", f"{action} was cancelled.", QMessageBox.Icon.Information)
+                self.status_label.setText(f"{action} cancelled.")
+            else:
+                self.show_message("Error", f"An error occurred: {error_message}", QMessageBox.Icon.Critical)
+                self.status_label.setText(f"Error while {action.lower()} files.")
+            self.progress_bar.setValue(0)
 
-        self.progress_bar.setValue(0)
+    def closeEvent(self, event):
+        if self.active_worker and self.active_worker.isRunning():
+            reply = QMessageBox.question(self, 'Confirm Exit',
+                                       "An operation is currently in progress. Do you want to stop and exit?",
+                                       QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, 
+                                       QMessageBox.StandardButton.No)
+
+            if reply == QMessageBox.StandardButton.Yes:
+                self.active_worker.stop()
+                self.active_worker.wait()
+                event.accept()
+            else:
+                event.ignore()
+        else:
+            event.accept()
 
     def show_message(self, title, message, icon):
         msg_box = QMessageBox(self)

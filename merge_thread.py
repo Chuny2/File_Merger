@@ -5,11 +5,12 @@ class MergeThread(QThread):
     progress = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, sources, target, cleanup=False):
+    def __init__(self, sources, target, cleanup=False, deduplicate=False):
         super().__init__()
         self.sources = sources
         self.target = target
         self.cleanup = cleanup
+        self.deduplicate = deduplicate
         self._active = True
 
     def stop(self):
@@ -27,25 +28,42 @@ class MergeThread(QThread):
             processed_size = 0
             last_progress = -1
             
+            seen_lines = set() if self.deduplicate else None
+            
             with open(self.target, 'wb') as outfile:
                 for src in self.sources:
                     if not self._active:
                         break
                         
-                    with open(src, 'rb') as infile:
-                        while self._active:
-                            chunk = infile.read(1024 * 1024)
-                            if not chunk:
-                                break
-                            outfile.write(chunk)
-                            
-                            processed_size += len(chunk)
-                            
-                            progress = int((processed_size * 100) / total_size) if total_size > 0 else 100
-
-                            if progress != last_progress:
-                                self.progress.emit(progress)
-                                last_progress = progress
+                    if self.deduplicate:
+                        with open(src, 'rb') as infile:
+                            for line in infile:
+                                if not self._active:
+                                    break
+                                
+                                
+                                stripped_line = line.rstrip(b'\r\n')
+                                if stripped_line not in seen_lines:
+                                    outfile.write(stripped_line + b'\n')
+                                    seen_lines.add(stripped_line)
+                                
+                                processed_size += len(line)
+                                progress = int((processed_size * 100) / total_size) if total_size > 0 else 100
+                                if progress != last_progress:
+                                    self.progress.emit(progress)
+                                    last_progress = progress
+                    else:
+                        with open(src, 'rb') as infile:
+                            while self._active:
+                                chunk = infile.read(1024 * 1024)
+                                if not chunk:
+                                    break
+                                outfile.write(chunk)
+                                processed_size += len(chunk)
+                                progress = int((processed_size * 100) / total_size) if total_size > 0 else 100
+                                if progress != last_progress:
+                                    self.progress.emit(progress)
+                                    last_progress = progress
                         
 
 
