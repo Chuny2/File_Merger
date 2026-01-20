@@ -147,7 +147,7 @@ class FileMergerApp(QMainWindow):
 
         # --- Header ---
         header_layout = QVBoxLayout()
-        title_label = QLabel("File Merger Pro")
+        title_label = QLabel("File Merger")
         title_label.setObjectName("titleLabel")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title_label)
